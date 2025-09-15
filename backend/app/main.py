@@ -37,8 +37,3 @@ async def health_check():
 async def generate_prompt(request: GeneratePromptRequest) -> GeneratePromptResponse:
     print(f"Beginning prompt generation for: {request}")
     return image_prompt_crew.generate_structured_prompt(request)
-
-@app.post("/api/generate-image", response_model=GenerateImageResponse)
-async def generate_image(request: GeneratedPromptData) -> GenerateImageResponse:
-    print(f"Beginning image generation for: {request}")
-    return image_prompt_crew.generate_image(request)
