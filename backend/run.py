@@ -11,16 +11,8 @@ from pathlib import Path
 # Add the current directory to Python path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from app.main import app
-from app.models.database import init_db
-
 def main():
     """Main entry point for the application"""
-    
-    # Initialize database
-    print("Initializing database...")
-    init_db()
-    print("Database initialized successfully!")
     
     # Get configuration from environment
     host = os.getenv("HOST", "0.0.0.0")
