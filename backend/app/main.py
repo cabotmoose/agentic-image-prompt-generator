@@ -1,5 +1,5 @@
 from .crew.crew_manager import ImagePromptGenerationCrew
-from .models.schemas import GeneratePromptRequest, GeneratePromptResponse
+from .models.schemas import GenerateImageResponse, GeneratePromptRequest, GeneratePromptResponse
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from crewai import LLM
@@ -21,7 +21,8 @@ app.add_middleware(
 )
 
 # Initialize crew
-llm = LLM(model="openai/gpt-5-mini")
+# Uses LiteLLM (https://docs.litellm.ai/docs/) format. Ensure appropriate API_KEY envars are set in the .env file
+llm = LLM(model="openai/gpt-4.1-mini")
 image_prompt_crew = ImagePromptGenerationCrew(llm=llm)
 
 @app.get("/")
@@ -32,7 +33,12 @@ async def root():
 async def health_check():
     return {"status": "healthy", "timestamp": datetime.now()}
 
-@app.post("/api/generate", response_model=GeneratePromptResponse)
+@app.post("/api/generate-prompt", response_model=GeneratePromptResponse)
 async def generate_prompt(request: GeneratePromptRequest) -> GeneratePromptResponse:
     print(f"Beginning prompt generation for: {request}")
     return image_prompt_crew.generate_structured_prompt(request)
+
+@app.post("/api/generate-image", response_model=GenerateImageResponse)
+async def generate_image(request: GeneratedPromptData) -> GenerateImageResponse:
+    print(f"Beginning image generation for: {request}")
+    return image_prompt_crew.generate_image(request)

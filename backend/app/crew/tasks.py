@@ -10,11 +10,12 @@ class ImagePromptGenerationTasks:
             Refine the initial prompt into a more detailed and creative image prompt that includes:
             - A detailed subject description
             - Camera and lens specifications
+            - Style (photorealistic, cartoon, painting, etc.)
             - Lighting conditions
             - Environment and background details
             - Artistic style elements
             """,
-            expected_output="A detailed and creative image prompt with subject, camera, and lighting details",
+            expected_output="A detailed and creative image prompt with subject, camera, style, and lighting details",
             agent=agent
         )
 
