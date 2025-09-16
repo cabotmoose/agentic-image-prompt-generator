@@ -6,15 +6,33 @@ import { getSuggestionsForField } from '@/lib/fieldSuggestions';
 import type { FieldSuggestionKey } from '@/lib/fieldSuggestions';
 import {
   generatePrompt,
+  GeneratePromptFromImageRequest,
   GeneratePromptRequest,
   GeneratePromptResponse,
   GeneratedPromptData,
   Subject,
+  generatePromptFromImage,
 } from '@/services/api';
+
+const TEXT_PROVIDERS = [
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'anthropic', label: 'Anthropic' },
+  { value: 'google', label: 'Google' },
+  { value: 'lmstudio', label: 'LM Studio (local)' },
+];
+
+const VISION_PROVIDERS = [
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'google', label: 'Google' },
+];
 
 export default function Home() {
   const [prompt, setPrompt] = useState('');
-  const [provider, setProvider] = useState('openai');
+  const [inputMode, setInputMode] = useState<'text' | 'image'>('text');
+  const [textProvider, setTextProvider] = useState(TEXT_PROVIDERS[0].value);
+  const [visionProvider, setVisionProvider] = useState(VISION_PROVIDERS[0].value);
+  const [referenceImage, setReferenceImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [response, setResponse] = useState<GeneratePromptResponse | null>(null);
   const [editableData, setEditableData] = useState<GeneratedPromptData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -50,17 +68,78 @@ export default function Home() {
       .filter((value) => value.length > 0)
       .join(', ');
 
+  const convertFileToBase64 = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (!reader.result) {
+          reject(new Error('Unable to read the selected image.'));
+          return;
+        }
+
+        const resultString = reader.result.toString();
+        const base64 = resultString.includes(',') ? resultString.split(',')[1] : resultString;
+        resolve(base64);
+      };
+      reader.onerror = () => reject(new Error('Unable to read the selected image.'));
+      reader.readAsDataURL(file);
+    });
+
+  const handleReferenceImageSelection = (file: File | null) => {
+    setReferenceImage(file);
+    if (!file) {
+      setImagePreview(null);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setImagePreview(reader.result);
+      }
+    };
+    reader.onerror = () => setImagePreview(null);
+    reader.readAsDataURL(file);
+  };
+
+  const handleModeChange = (mode: 'text' | 'image') => {
+    setInputMode(mode);
+    setResponse(null);
+    if (mode === 'text') {
+      handleReferenceImageSelection(null);
+    } else {
+      setPrompt('');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!prompt.trim()) return;
+    if (inputMode === 'text' && !prompt.trim()) return;
+    if (inputMode === 'image' && !referenceImage) return;
 
     setLoading(true);
     try {
-      const request: GeneratePromptRequest = {
-        prompt: prompt.trim(),
-        provider,
-      };
-      const result = await generatePrompt(request);
+      let result: GeneratePromptResponse;
+
+      if (inputMode === 'text') {
+        const request: GeneratePromptRequest = {
+          prompt: prompt.trim(),
+          provider: textProvider,
+        };
+        result = await generatePrompt(request);
+      } else {
+        if (!referenceImage) {
+          throw new Error('Missing reference image');
+        }
+        const imageBase64 = await convertFileToBase64(referenceImage);
+        const request: GeneratePromptFromImageRequest = {
+          image_base64: imageBase64,
+          filename: referenceImage.name,
+          provider: visionProvider,
+        };
+        result = await generatePromptFromImage(request);
+      }
+
       setResponse(result);
       if (result.success && result.data) {
         setEditableData(result.data);
@@ -69,6 +148,7 @@ export default function Home() {
         setEditableData(null);
       }
     } catch (error) {
+      console.error('Failed to generate prompt:', error);
       setResponse({
         success: false,
         error: 'An unexpected error occurred',
@@ -181,7 +261,10 @@ export default function Home() {
   const handleForward = () => {
     if (currentStep === steps.length - 1) {
       setPrompt('');
-      setProvider('openai');
+      setInputMode('text');
+      setTextProvider(TEXT_PROVIDERS[0].value);
+      setVisionProvider(VISION_PROVIDERS[0].value);
+      handleReferenceImageSelection(null);
       setResponse(null);
       setEditableData(null);
       setCopied(false);
@@ -192,6 +275,41 @@ export default function Home() {
     if (!canAdvance()) return;
     setCurrentStep((prev) => Math.min(prev + 1, steps.length - 1));
   };
+
+  const renderNavigationControls = ({
+    continueLabel,
+    disableContinue,
+    disableBack,
+    showBack = true,
+  }: {
+    continueLabel: string;
+    disableContinue: boolean;
+    disableBack: boolean;
+    showBack?: boolean;
+  }) => (
+    <div className="flex flex-wrap items-center justify-end gap-3">
+      {showBack && (
+        <button
+          type="button"
+          onClick={handleBack}
+          disabled={disableBack}
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-700 px-5 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={handleForward}
+        disabled={disableContinue}
+        className="inline-flex items-center gap-2 rounded-xl bg-blue-500/90 px-6 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {continueLabel}
+        <ArrowRight className="h-4 w-4" />
+      </button>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-slate-950 bg-[radial-gradient(circle_at_top,_rgba(37,99,235,0.18),_transparent)] py-12 px-6 text-slate-100">
@@ -232,60 +350,154 @@ export default function Home() {
                 style={{ transform: `translateX(-${currentStep * 100}%)` }}
               >
                 <section className="w-full flex-shrink-0 p-8 space-y-6">
-                  <div className="space-y-4">
-                    <h2 className="text-2xl font-semibold text-white">Step 1 · Describe your concept</h2>
-                    <p className="text-sm text-slate-400 max-w-2xl">
-                      Provide a concise description of the image you want to create. Choose your preferred provider and
-                      let the generator build the initial technical blueprint.
-                    </p>
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
+                    <div className="space-y-2 max-w-3xl">
+                      <h2 className="text-2xl font-semibold text-white">Step 1 · Describe your concept</h2>
+                      <p className="text-sm text-slate-400">
+                        Provide a concise description or upload a reference image. Choose a compatible provider and let
+                        the generator build the initial technical blueprint.
+                      </p>
+                    </div>
+                    {renderNavigationControls({
+                      continueLabel: 'Continue',
+                      disableContinue: !canAdvance(),
+                      disableBack: !canGoBack,
+                    })}
                   </div>
 
                   <form onSubmit={handleSubmit} className="space-y-6 max-w-3xl">
-                    <div className="space-y-2">
-                      <label htmlFor="prompt" className="block text-sm font-semibold text-slate-200">
-                        Base idea
-                      </label>
-                      <textarea
-                        id="prompt"
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
-                        placeholder="e.g. A futuristic city street bustling with neon-lit rain"
-                        className="w-full rounded-xl border border-slate-700 bg-slate-900/80 px-4 py-3 text-sm text-slate-100 shadow-inner focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        rows={6}
-                        required
-                      />
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={() => handleModeChange('text')}
+                        className={`flex-1 min-w-[200px] rounded-xl border px-4 py-2 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-blue-500/60 ${
+                          inputMode === 'text'
+                            ? 'border-blue-500 bg-blue-500/10 text-blue-200 shadow-lg'
+                            : 'border-slate-700 text-slate-300 hover:border-slate-500 hover:text-white'
+                        }`}
+                      >
+                        Describe with text
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleModeChange('image')}
+                        className={`flex-1 min-w-[200px] rounded-xl border px-4 py-2 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-blue-500/60 ${
+                          inputMode === 'image'
+                            ? 'border-blue-500 bg-blue-500/10 text-blue-200 shadow-lg'
+                            : 'border-slate-700 text-slate-300 hover:border-slate-500 hover:text-white'
+                        }`}
+                      >
+                        Use reference image
+                      </button>
                     </div>
 
+                    {inputMode === 'text' ? (
+                      <div className="space-y-2">
+                        <label htmlFor="prompt" className="block text-sm font-semibold text-slate-200">
+                          Base idea
+                        </label>
+                        <textarea
+                          id="prompt"
+                          value={prompt}
+                          onChange={(e) => setPrompt(e.target.value)}
+                          placeholder="e.g. A futuristic city street bustling with neon-lit rain"
+                          className="w-full rounded-xl border border-slate-700 bg-slate-900/80 px-4 py-3 text-sm text-slate-100 shadow-inner focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          rows={6}
+                          required
+                        />
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <label htmlFor="reference-image" className="block text-sm font-semibold text-slate-200">
+                          Reference image
+                        </label>
+                        <div className="space-y-3">
+                          <label
+                            htmlFor="reference-image"
+                            className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-700 bg-slate-900/60 px-6 py-8 text-center text-sm text-slate-300 transition hover:border-slate-500 hover:text-white"
+                          >
+                            <span className="font-medium">
+                              {referenceImage ? 'Change image' : 'Upload an image'}
+                            </span>
+                            <span className="text-xs text-slate-500">PNG, JPG up to 10MB</span>
+                          </label>
+                          <input
+                            id="reference-image"
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              handleReferenceImageSelection(e.target.files?.[0] ?? null);
+                              e.target.value = '';
+                            }}
+                          />
+                          {referenceImage && imagePreview && (
+                            <div className="flex items-center gap-4 rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+                              <img
+                                src={imagePreview}
+                                alt="Reference preview"
+                                className="h-20 w-20 rounded-lg object-cover"
+                              />
+                              <div className="space-y-1 text-sm">
+                                <p className="text-slate-200">{referenceImage.name}</p>
+                                <p className="text-xs text-slate-500">
+                                  {Math.max(1, Math.round(referenceImage.size / 1024))} KB
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => handleReferenceImageSelection(null)}
+                                  className="text-xs font-medium text-blue-300 hover:text-blue-200"
+                                >
+                                  Remove image
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="space-y-2">
-                      <label htmlFor="provider" className="block text-sm font-semibold text-slate-200">
-                        AI provider
+                      <label
+                        htmlFor={inputMode === 'text' ? 'provider' : 'vision-provider'}
+                        className="block text-sm font-semibold text-slate-200"
+                      >
+                        {inputMode === 'text' ? 'AI provider' : 'Vision-enabled provider'}
                       </label>
                       <select
-                        id="provider"
-                        value={provider}
-                        onChange={(e) => setProvider(e.target.value)}
+                        id={inputMode === 'text' ? 'provider' : 'vision-provider'}
+                        value={inputMode === 'text' ? textProvider : visionProvider}
+                        onChange={(e) =>
+                          inputMode === 'text'
+                            ? setTextProvider(e.target.value)
+                            : setVisionProvider(e.target.value)
+                        }
                         className="w-full rounded-xl border border-slate-700 bg-slate-900/80 px-4 py-3 text-sm text-slate-100 shadow-inner focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
-                        <option value="openai">OpenAI</option>
-                        <option value="anthropic">Anthropic</option>
-                        <option value="google">Google</option>
+                        {(inputMode === 'text' ? TEXT_PROVIDERS : VISION_PROVIDERS).map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
                       </select>
                     </div>
 
                     <button
                       type="submit"
-                      disabled={loading || !prompt.trim()}
+                      disabled={loading || (inputMode === 'text' ? !prompt.trim() : !referenceImage)}
                       className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 px-6 py-3 text-sm font-semibold text-white shadow-lg transition hover:from-blue-400 hover:to-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {loading ? (
                         <>
                           <Loader2 className="h-4 w-4 animate-spin" />
-                          Generating...
+                          {inputMode === 'text' ? 'Generating...' : 'Analysing...'}
                         </>
                       ) : (
                         <>
                           <Send className="h-4 w-4" />
-                          Generate structured prompt
+                          {inputMode === 'text'
+                            ? 'Generate structured prompt'
+                            : 'Describe reference image'}
                         </>
                       )}
                     </button>
@@ -299,23 +511,19 @@ export default function Home() {
                 </section>
 
                 <section className="w-full flex-shrink-0 p-8 space-y-6">
-                  <div className="flex items-start justify-between gap-6">
-                    <div className="space-y-4">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
+                    <div className="space-y-2 max-w-3xl">
                       <h2 className="text-2xl font-semibold text-white">Step 2 · Refine the technical recipe</h2>
-                      <p className="text-sm text-slate-400 max-w-3xl">
+                      <p className="text-sm text-slate-400">
                         Edit individual keywords to fine-tune the composition. Each value supports quick replacements from
                         curated suggestions or you can add your own variations.
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleForward}
-                      disabled={currentStep !== 1 || !canAdvance()}
-                      className="inline-flex items-center gap-2 rounded-xl bg-blue-500/90 px-5 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Continue
-                      <ArrowRight className="h-4 w-4" />
-                    </button>
+                    {renderNavigationControls({
+                      continueLabel: 'Continue',
+                      disableContinue: currentStep !== 1 || !canAdvance(),
+                      disableBack: !canGoBack,
+                    })}
                   </div>
 
                   {editableData ? (
@@ -468,12 +676,19 @@ export default function Home() {
                 </section>
 
                 <section className="w-full flex-shrink-0 p-8 space-y-6">
-                  <div className="space-y-4">
-                    <h2 className="text-2xl font-semibold text-white">Step 3 · Finalize & deploy</h2>
-                    <p className="text-sm text-slate-400 max-w-3xl">
-                      Review the finished prompt data and copy it directly into your creative tooling. You can always go
-                      back to adjust a detail before deploying.
-                    </p>
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
+                    <div className="space-y-2 max-w-3xl">
+                      <h2 className="text-2xl font-semibold text-white">Step 3 · Finalize & deploy</h2>
+                      <p className="text-sm text-slate-400">
+                        Review the finished prompt data and copy it directly into your creative tooling. You can always go
+                        back to adjust a detail before deploying.
+                      </p>
+                    </div>
+                    {renderNavigationControls({
+                      continueLabel: currentStep === steps.length - 1 ? 'Start new prompt' : 'Continue',
+                      disableContinue: !canAdvance(),
+                      disableBack: !canGoBack,
+                    })}
                   </div>
 
                   {editableData ? (
@@ -549,39 +764,6 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-4">
-              <button
-                type="button"
-                onClick={handleBack}
-                disabled={!canGoBack}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-700 px-5 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back
-              </button>
-              {currentStep === 1 ? (
-                <div className="h-10" />
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleForward}
-                  disabled={!canAdvance()}
-                  className="inline-flex items-center gap-2 rounded-xl bg-blue-500/90 px-6 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {currentStep === steps.length - 1 ? (
-                    <>
-                      Start new prompt
-                      <ArrowRight className="h-4 w-4" />
-                    </>
-                  ) : (
-                    <>
-                      Continue
-                      <ArrowRight className="h-4 w-4" />
-                    </>
-                  )}
-                </button>
-              )}
-            </div>
           </div>
         </div>
       </div>

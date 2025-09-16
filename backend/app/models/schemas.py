@@ -6,6 +6,12 @@ class GeneratePromptRequest(BaseModel):
     prompt: str
     provider: Optional[str] = "openai"
 
+
+class GeneratePromptFromImageRequest(BaseModel):
+    image_base64: str
+    filename: Optional[str] = None
+    provider: Optional[str] = "openai"
+
 # Response schemas
 class CameraSettings(BaseModel):
     angle: str

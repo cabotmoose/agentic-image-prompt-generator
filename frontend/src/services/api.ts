@@ -14,6 +14,12 @@ export interface GeneratePromptRequest {
   provider?: string;
 }
 
+export interface GeneratePromptFromImageRequest {
+  image_base64: string;
+  filename?: string;
+  provider?: string;
+}
+
 export interface CameraSettings {
   angle: string;
   lens: string;
@@ -52,6 +58,26 @@ export const generatePrompt = async (request: GeneratePromptRequest): Promise<Ge
       return {
         success: false,
         error: error.response.data?.error || 'An error occurred while generating the prompt',
+      };
+    }
+    return {
+      success: false,
+      error: 'Network error: Unable to connect to the server',
+    };
+  }
+};
+
+export const generatePromptFromImage = async (
+  request: GeneratePromptFromImageRequest
+): Promise<GeneratePromptResponse> => {
+  try {
+    const response = await api.post<GeneratePromptResponse>('/api/describe-image', request);
+    return response.data;
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response) {
+      return {
+        success: false,
+        error: error.response.data?.error || 'An error occurred while analysing the image',
       };
     }
     return {

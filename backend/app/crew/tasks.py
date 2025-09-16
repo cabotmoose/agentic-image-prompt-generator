@@ -1,4 +1,7 @@
+from typing import Optional
+
 from crewai import Task
+
 from ..models.schemas import GeneratedPromptData
 
 class ImagePromptGenerationTasks:
@@ -30,5 +33,29 @@ class ImagePromptGenerationTasks:
             agent=agent,
             context=context,
             expected_output="An edited and refined image prompt in the required output format",
+            output_json=GeneratedPromptData
+        )
+
+    def describe_image(self, agent, image_base64: str, filename: Optional[str] = None):
+        preview = image_base64[:1200] + "..." if len(image_base64) > 1200 else image_base64
+        name = filename or "uploaded reference"
+        return Task(
+            description=f"""
+            You are provided with an uploaded reference image in base64 format.
+
+            Filename: {name}
+            Image data (base64): {preview}
+
+            Use your multimodal capabilities to analyse the visual content of the image. Fill the GeneratedPromptData
+            JSON schema so that it mirrors what you see:
+            - Populate camera angle, lens, and framing using information implied by the shot
+            - Describe overall style, environment, and lighting based purely on the scene
+            - When people are present, add subjects with mood, age estimates, body attributes, wardrobe, and pose
+            - If no data is apparent for a field, provide a short descriptive fallback rather than leaving it blank
+
+            Avoid fabricating details that are not visually supported by the reference.
+            """,
+            expected_output="A GeneratedPromptData JSON object that captures camera, scene, lighting, and subjects from the image",
+            agent=agent,
             output_json=GeneratedPromptData
         )

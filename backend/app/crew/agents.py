@@ -30,3 +30,15 @@ class ImagePromptGenerationAgents:
             verbose=True,
             allow_delegation=False
         )
+
+    def image_description_agent(self):
+        return Agent(
+            role="Image Description Agent",
+            goal="Analyze uploaded images and provide detailed descriptions of their content",
+            backstory="""You are a skilled image analyst with a deep understanding of visual elements, 
+            scene composition, and object recognition. You excel at interpreting images and creating 
+            comprehensive descriptions that capture the essence of the visual content.""",
+            llm=self.llm,
+            verbose=True,
+            allow_delegation=False
+        )

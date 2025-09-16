@@ -1,9 +1,15 @@
-from .crew.crew_manager import ImagePromptGenerationCrew
-from .models.schemas import GenerateImageResponse, GeneratePromptRequest, GeneratePromptResponse
+from datetime import datetime
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from crewai import LLM
-from datetime import datetime
+
+from .crew.crew_manager import ImagePromptGenerationCrew
+from .models.schemas import (
+    GeneratePromptFromImageRequest,
+    GeneratePromptRequest,
+    GeneratePromptResponse,
+)
+from .services.provider_config import ProviderConfigurationService
 
 app = FastAPI(
     title="Text-to-Image Prompt Generator API",
@@ -20,10 +26,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize crew
+# Initialize provider configuration and crew
 # Uses LiteLLM (https://docs.litellm.ai/docs/) format. Ensure appropriate API_KEY envars are set in the .env file
-llm = LLM(model="openai/gpt-4.1-mini")
-image_prompt_crew = ImagePromptGenerationCrew(llm=llm)
+provider_configuration = ProviderConfigurationService()
+image_prompt_crew = ImagePromptGenerationCrew(provider_service=provider_configuration)
 
 @app.get("/")
 async def root():
@@ -37,3 +43,9 @@ async def health_check():
 async def generate_prompt(request: GeneratePromptRequest) -> GeneratePromptResponse:
     print(f"Beginning prompt generation for: {request}")
     return image_prompt_crew.generate_structured_prompt(request)
+
+
+@app.post("/api/describe-image", response_model=GeneratePromptResponse)
+async def describe_image(request: GeneratePromptFromImageRequest) -> GeneratePromptResponse:
+    print(f"Beginning image description for: {request.filename or 'uploaded image'}")
+    return image_prompt_crew.generate_structured_prompt_from_image(request)
