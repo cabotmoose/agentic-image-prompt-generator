@@ -26,11 +26,15 @@ class ImagePromptGenerationCrew:
             result = crew.kickoff()
         except Exception as error:  # pragma: no cover - CrewAI surfaces rich errors
             return GeneratePromptResponse(success=False, error=str(error))
-        return GeneratePromptResponse(success=True, data=result.json_dict)
+        token_usage = getattr(result, "token_usage", None)
+        if token_usage is None:
+            token_usage = getattr(result, "usage_metrics", None)
+        data = getattr(result, "json_dict", None)
+        return GeneratePromptResponse(success=True, data=data, token_usage=token_usage)
 
     def generate_structured_prompt(self, request: GeneratePromptRequest) -> GeneratePromptResponse:
         try:
-            llm = self.provider_service.create_llm(request.provider)
+            llm = self.provider_service.create_llm(request.provider, api_keys=request.provider_api_keys)
         except ValueError as error:
             return GeneratePromptResponse(success=False, error=str(error))
 
@@ -50,7 +54,11 @@ class ImagePromptGenerationCrew:
         self, request: GeneratePromptFromImageRequest
     ) -> GeneratePromptResponse:
         try:
-            llm = self.provider_service.create_llm(request.provider, require_vision=True)
+            llm = self.provider_service.create_llm(
+                request.provider,
+                require_vision=True,
+                api_keys=request.provider_api_keys,
+            )
         except ValueError as error:
             return GeneratePromptResponse(success=False, error=str(error))
 

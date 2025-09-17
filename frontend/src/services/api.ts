@@ -12,12 +12,14 @@ const api = axios.create({
 export interface GeneratePromptRequest {
   prompt: string;
   provider?: string;
+  provider_api_keys?: Record<string, string>;
 }
 
 export interface GeneratePromptFromImageRequest {
   image_base64: string;
   filename?: string;
   provider?: string;
+  provider_api_keys?: Record<string, string>;
 }
 
 export interface CameraSettings {
@@ -47,6 +49,7 @@ export interface GeneratePromptResponse {
   data?: GeneratedPromptData;
   processing_time?: number;
   error?: string;
+  token_usage?: unknown;
 }
 
 export const generatePrompt = async (request: GeneratePromptRequest): Promise<GeneratePromptResponse> => {

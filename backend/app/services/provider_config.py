@@ -18,16 +18,22 @@ class ProviderConfig:
     model_env: Optional[str] = None
     requires_api_key: bool = True
 
-    def validate(self) -> None:
-        if self.requires_api_key:
-            if not self.api_key_env:
-                raise ValueError(
-                    f"Provider '{self.provider_id}' is misconfigured. An API key environment variable is required."
-                )
-            if not os.getenv(self.api_key_env):
-                raise ValueError(
-                    f"Missing API key for provider '{self.provider_id}'. Set {self.api_key_env} in the environment."
-                )
+    def validate(self, api_key_override: Optional[str] = None) -> None:
+        if not self.requires_api_key:
+            return
+
+        if api_key_override:
+            return
+
+        if not self.api_key_env:
+            raise ValueError(
+                f"Provider '{self.provider_id}' is misconfigured. An API key environment variable is required."
+            )
+
+        if not os.getenv(self.api_key_env):
+            raise ValueError(
+                f"Missing API key for provider '{self.provider_id}'. Set {self.api_key_env} in the environment."
+            )
 
     def _resolve_model(self) -> str:
         if self.model_env:
@@ -41,11 +47,13 @@ class ProviderConfig:
                 return custom_base
         return self.default_base_url
 
-    def create_llm(self) -> LLM:
-        self.validate()
+    def create_llm(self, *, api_key_override: Optional[str] = None) -> LLM:
+        self.validate(api_key_override)
         llm_kwargs: Dict[str, Any] = {"model": self._resolve_model()}
 
-        if self.api_key_env:
+        if api_key_override:
+            llm_kwargs["api_key"] = api_key_override
+        elif self.api_key_env:
             api_key = os.getenv(self.api_key_env)
             if api_key:
                 llm_kwargs["api_key"] = api_key
@@ -100,11 +108,20 @@ class ProviderConfigurationService:
             raise ValueError(f"Unsupported provider '{provider_id}'. Supported providers: {supported}.")
         return self._providers[key]
 
-    def create_llm(self, provider_id: Optional[str], *, require_vision: bool = False) -> LLM:
+    def create_llm(
+        self,
+        provider_id: Optional[str],
+        *,
+        require_vision: bool = False,
+        api_keys: Optional[Dict[str, str]] = None,
+    ) -> LLM:
         config = self.get_provider(provider_id)
         if require_vision and not config.supports_vision:
             raise ValueError(f"Provider '{config.provider_id}' does not support vision-enabled workflows.")
-        return config.create_llm()
+        override_key: Optional[str] = None
+        if api_keys:
+            override_key = api_keys.get(config.provider_id)
+        return config.create_llm(api_key_override=override_key)
 
     @property
     def default_provider(self) -> str:

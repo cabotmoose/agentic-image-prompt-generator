@@ -1,16 +1,18 @@
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 # Request schemas
 class GeneratePromptRequest(BaseModel):
     prompt: str
     provider: Optional[str] = "openai"
+    provider_api_keys: Optional[Dict[str, str]] = None
 
 
 class GeneratePromptFromImageRequest(BaseModel):
     image_base64: str
     filename: Optional[str] = None
     provider: Optional[str] = "openai"
+    provider_api_keys: Optional[Dict[str, str]] = None
 
 # Response schemas
 class CameraSettings(BaseModel):
@@ -37,6 +39,7 @@ class GeneratePromptResponse(BaseModel):
     data: Optional[GeneratedPromptData] = None
     processing_time: Optional[float] = None
     error: Optional[str] = None
+    token_usage: Optional[Any] = None
 
 class GenerateImageResponse(BaseModel):
     success: bool
