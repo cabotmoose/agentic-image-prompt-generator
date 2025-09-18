@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Literal
 
 from pydantic import BaseModel, Field
 
@@ -138,3 +138,31 @@ class GenerateImageResponse(BaseModel):
     image_url: Optional[str] = None
     processing_time: Optional[float] = None
     error: Optional[str] = None
+
+
+
+class ConvertPromptRequest(BaseModel):
+    data: GeneratedPromptData
+    target_model: Literal["flux.1", "wan-2.2", "sdxl"]
+    provider: Optional[str] = None
+    provider_api_keys: Optional[Dict[str, str]] = None
+
+
+class ProviderOptimizedPayload(BaseModel):
+    target_model: Literal["flux.1", "wan-2.2", "sdxl"]
+    model_identifier: str
+    prompt: str
+    negative_prompt: Optional[str] = None
+    payload: Dict[str, Any] = Field(default_factory=dict)
+    recommended_settings: Dict[str, Any] = Field(default_factory=dict)
+    control_assets: Dict[str, Any] = Field(default_factory=dict)
+    notes: List[str] = Field(default_factory=list)
+
+
+class ConvertPromptResponse(BaseModel):
+    success: bool
+    data: Optional[ProviderOptimizedPayload] = None
+    error: Optional[str] = None
+    token_usage: Optional[Any] = None
+
+

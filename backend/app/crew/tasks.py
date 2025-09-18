@@ -1,8 +1,9 @@
+import json
 from typing import Optional
 
 from crewai import Task
 
-from ..models.schemas import GeneratedPromptData
+from ..models.schemas import GeneratedPromptData, ProviderOptimizedPayload
 
 
 class ImagePromptGenerationTasks:
@@ -76,3 +77,73 @@ class ImagePromptGenerationTasks:
             output_json=GeneratedPromptData
         )
 
+
+class PromptConversionTasks:
+    """Task factory for translating structured prompts into provider formats."""
+
+    _MODEL_GUIDANCE = {
+        "flux.1": (
+            "Prioritise cinematic realism with balanced high-frequency detail. Populate payload with fields such as \
+            prompt, negative_prompt, width, height, steps, guidance_scale, sampler (Euler Ancestral works well) and \
+            num_images. Include scheduler ('ddim' or 'flow') and optional aesthetic controls."
+        ),
+        "wan-2.2": (
+            "Prioritize photorealism with true-to-life skin, fabric, and material textures. Populate payload with fields such as prompt, negative_prompt, width, height, steps, guidance_scale (CFG), sampler (DPM++ 2M Karras recommended), and num_images. Include scheduler ('karras' or 'ddim') and optional controls (ControlNet/IP-Adapter, LoRA with weights). For RTX 4090 defaults, target 1024–1536 on the long edge, 30–36 steps, guidance 6.0–7.0, and add strong negatives for waxy skin, banding, extra digits, and warped limbs."
+        ),
+        "sdxl": (
+            "Optimise for SDXL base + refiner. Supply payload keys prompt, negative_prompt, width, height, \
+            cfg_scale, steps, sampler, scheduler, hi_res_fix (if needed), denoising_strength, and refiner settings."
+        ),
+    }
+
+    def _prompt_snapshot(self, data: GeneratedPromptData) -> str:
+        return json.dumps(data.dict(), indent=2)
+
+    def _guidance(self, target_model: str) -> str:
+        key = target_model.lower()
+        return self._MODEL_GUIDANCE.get(key, "")
+
+    def convert_prompt(self, agent, target_model: str, data: GeneratedPromptData):
+        blueprint = self._prompt_snapshot(data)
+        guidance = self._guidance(target_model)
+        return Task(
+            description=f"""
+            You are preparing a provider-optimised payload for {target_model}.
+
+            Structured prompt blueprint (GeneratedPromptData):
+            ```json
+            {blueprint}
+            ```
+
+            {guidance}
+
+            Follow the ProviderOptimizedPayload schema. Map values thoughtfully, reflect any relevant controls, and
+            populate recommended_settings with numeric parameters suited to {target_model}. If controls or overrides are
+            irrelevant, leave the corresponding objects empty.
+            """,
+            agent=agent,
+            expected_output="ProviderOptimizedPayload JSON with provider-ready payload details",
+            output_json=ProviderOptimizedPayload
+        )
+
+    def review_conversion(self, agent, target_model: str, context):
+        guidance = self._guidance(target_model)
+        return Task(
+            description=f"""
+            Review the draft ProviderOptimizedPayload for {target_model}.
+
+            Ensure the payload:
+            - Preserves the creative intent and safety controls from the structured prompt
+            - Uses valid field names and realistic numeric ranges for {target_model}
+            - Documents caveats or follow-up actions in the notes array
+            - Keeps payload and recommended_settings aligned (no conflicting values)
+
+            {guidance}
+
+            Deliver the final, deployment-ready ProviderOptimizedPayload JSON.
+            """,
+            agent=agent,
+            context=context,
+            expected_output="Validated ProviderOptimizedPayload JSON",
+            output_json=ProviderOptimizedPayload
+        )

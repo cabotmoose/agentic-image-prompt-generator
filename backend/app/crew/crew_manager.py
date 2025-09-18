@@ -1,13 +1,17 @@
 from typing import Iterable
 
 from crewai import Crew, Process
+from pydantic import ValidationError
 
-from .agents import ImagePromptGenerationAgents
-from .tasks import ImagePromptGenerationTasks
+from .agents import ImagePromptGenerationAgents, PromptConversionAgents
+from .tasks import ImagePromptGenerationTasks, PromptConversionTasks
 from ..models.schemas import (
+    ConvertPromptRequest,
+    ConvertPromptResponse,
     GeneratePromptFromImageRequest,
     GeneratePromptRequest,
     GeneratePromptResponse,
+    ProviderOptimizedPayload,
 )
 from ..services.provider_config import ProviderConfigurationService
 
@@ -72,4 +76,52 @@ class ImagePromptGenerationCrew:
         return self._run_crew(
             agents=[image_analyst],
             tasks=[describe_image_task],
+        )
+
+
+class PromptConversionCrew:
+    """Handles conversion of structured prompts into provider-optimised payloads."""
+
+    def __init__(self, provider_service: ProviderConfigurationService) -> None:
+        self.provider_service = provider_service
+        self.tasks = PromptConversionTasks()
+
+    @staticmethod
+    def _run_crew(agents: Iterable, tasks: Iterable) -> ConvertPromptResponse:
+        crew = Crew(agents=list(agents), tasks=list(tasks), process=Process.sequential, verbose=True)
+        try:
+            result = crew.kickoff()
+        except Exception as error:  # pragma: no cover - CrewAI surfaces rich errors
+            return ConvertPromptResponse(success=False, error=str(error))
+        token_usage = getattr(result, "token_usage", None)
+        if token_usage is None:
+            token_usage = getattr(result, "usage_metrics", None)
+        data_dict = getattr(result, "json_dict", None)
+        if data_dict is None:
+            return ConvertPromptResponse(success=False, error="Crew did not return JSON data.")
+        try:
+            payload = ProviderOptimizedPayload(**data_dict)
+        except ValidationError as error:
+            return ConvertPromptResponse(success=False, error=f"Invalid provider payload: {error}")
+        return ConvertPromptResponse(success=True, data=payload, token_usage=token_usage)
+
+    def convert_prompt(self, request: ConvertPromptRequest) -> ConvertPromptResponse:
+        try:
+            llm = self.provider_service.create_llm(request.provider, api_keys=request.provider_api_keys)
+        except ValueError as error:
+            return ConvertPromptResponse(success=False, error=str(error))
+
+        agents_factory = PromptConversionAgents(llm)
+        try:
+            specialist = agents_factory.specialist_for(request.target_model)
+        except ValueError as error:
+            return ConvertPromptResponse(success=False, error=str(error))
+        reviewer = agents_factory.conversion_reviewer_agent()
+
+        convert_task = self.tasks.convert_prompt(specialist, request.target_model, request.data)
+        review_task = self.tasks.review_conversion(reviewer, request.target_model, [convert_task])
+
+        return self._run_crew(
+            agents=[specialist, reviewer],
+            tasks=[convert_task, review_task],
         )

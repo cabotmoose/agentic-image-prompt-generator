@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Settings } from 'lucide-react';
 import SettingsModal from '@/components/SettingsModal';
 import { useSession } from '@/hooks/useSession';
@@ -8,8 +8,11 @@ import {
   GeneratePromptResponse,
   GeneratedPromptData,
   Subject,
+  ConvertPromptResponse,
+  ProviderTargetModel,
   generatePrompt,
   generatePromptFromImage,
+  convertPrompt,
 } from '@/services/api';
 import { DescribeStep, ProviderOption } from '@/pages/steps/DescribeStep';
 import { RefineStep } from '@/pages/steps/RefineStep';
@@ -157,6 +160,11 @@ export default function Home() {
   const [copied, setCopied] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [conversionTarget, setConversionTarget] = useState<ProviderTargetModel>('flux.1');
+  const [conversionResponse, setConversionResponse] = useState<ConvertPromptResponse | null>(null);
+  const [conversionLoading, setConversionLoading] = useState(false);
+  const [conversionError, setConversionError] = useState<string | null>(null);
+  const lastEditableSnapshot = useRef<string | null>(null);
 
   const { apiKeys, addTokenUsage, tokenUsage } = useSession();
 
@@ -186,6 +194,39 @@ export default function Home() {
     () => tokenUsage.toLocaleString(undefined, { maximumFractionDigits: 0 }),
     [tokenUsage]
   );
+
+  const conversionTokenUsage = useMemo(
+    () => (conversionResponse ? normaliseTokenUsage(conversionResponse.token_usage) : null),
+    [conversionResponse]
+  );
+
+  const resetConversion = useCallback(() => {
+    setConversionResponse(null);
+    setConversionError(null);
+    setConversionLoading(false);
+  }, []);
+
+  const handleConversionTargetChange = useCallback((target: ProviderTargetModel) => {
+    setConversionTarget(target);
+  }, []);
+
+  useEffect(() => {
+    if (!editableData) {
+      if (lastEditableSnapshot.current !== null) {
+        lastEditableSnapshot.current = null;
+        resetConversion();
+      }
+      return;
+    }
+
+    const snapshot = JSON.stringify(editableData);
+    if (lastEditableSnapshot.current !== snapshot) {
+      if (lastEditableSnapshot.current !== null) {
+        resetConversion();
+      }
+      lastEditableSnapshot.current = snapshot;
+    }
+  }, [editableData, resetConversion]);
 
   const isSubmitDisabled = loading || (inputMode === 'text' ? !prompt.trim() : !referenceImage);
 
@@ -232,12 +273,46 @@ export default function Home() {
     }
   };
 
-  const trackTokenUsage = (usage: unknown) => {
+  const trackTokenUsage = useCallback((usage: unknown) => {
     const total = normaliseTokenUsage(usage);
     if (total > 0) {
       addTokenUsage(total);
     }
-  };
+  }, [addTokenUsage]);
+
+  const handleConvert = useCallback(async () => {
+    if (!editableData) {
+      setConversionError('Structured prompt is not available yet.');
+      return;
+    }
+
+    setConversionLoading(true);
+    setConversionError(null);
+
+    try {
+      const result = await convertPrompt({
+        data: editableData,
+        target_model: conversionTarget,
+        provider: textProvider,
+        provider_api_keys: sanitisedApiKeys,
+      });
+
+      if (result.success && result.data) {
+        setConversionResponse(result);
+      } else {
+        setConversionResponse(null);
+        setConversionError(result.error || 'Unable to convert the prompt.');
+      }
+
+      trackTokenUsage(result.token_usage);
+    } catch (error) {
+      console.error('Failed to convert prompt:', error);
+      setConversionResponse(null);
+      setConversionError('An unexpected error occurred during conversion.');
+    } finally {
+      setConversionLoading(false);
+    }
+  }, [editableData, conversionTarget, textProvider, sanitisedApiKeys, trackTokenUsage]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -496,6 +571,10 @@ export default function Home() {
       setResponse(null);
       setEditableData(null);
       setCopied(false);
+      resetConversion();
+      setConversionTarget('flux.1');
+      setConversionLoading(false);
+      lastEditableSnapshot.current = null;
       setCurrentStep(0);
       return;
     }
@@ -643,6 +722,14 @@ export default function Home() {
                   response={response}
                   copied={copied}
                   onCopy={copyToClipboard}
+                  conversionTarget={conversionTarget}
+                  onConversionTargetChange={handleConversionTargetChange}
+                  onConvert={handleConvert}
+                  conversionLoading={conversionLoading}
+                  conversionResult={conversionResponse?.data ?? null}
+                  conversionError={conversionError}
+                  conversionTokenUsage={conversionTokenUsage}
+                  onResetConversion={resetConversion}
                   navigation={renderNavigationControls({
                     continueLabel: currentStep === steps.length - 1 ? 'Start new prompt' : 'Continue',
                     disableContinue: !canAdvance(),
@@ -668,3 +755,4 @@ export default function Home() {
     </div>
   );
 }
+

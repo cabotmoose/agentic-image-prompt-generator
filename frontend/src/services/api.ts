@@ -137,21 +137,52 @@ export interface GeneratePromptResponse {
   token_usage?: unknown;
 }
 
+export type ProviderTargetModel = 'flux.1' | 'wan-2.2' | 'sdxl';
+
+export interface ProviderOptimizedPayload {
+  target_model: ProviderTargetModel;
+  model_identifier: string;
+  prompt: string;
+  negative_prompt?: string;
+  payload: Record<string, unknown>;
+  recommended_settings: Record<string, unknown>;
+  control_assets: Record<string, unknown>;
+  notes: string[];
+}
+
+export interface ConvertPromptRequest {
+  data: GeneratedPromptData;
+  target_model: ProviderTargetModel;
+  provider?: string;
+  provider_api_keys?: Record<string, string>;
+}
+
+export interface ConvertPromptResponse {
+  success: boolean;
+  data?: ProviderOptimizedPayload;
+  error?: string;
+  token_usage?: unknown;
+}
+
+const handleAxiosError = (error: unknown, fallbackMessage: string) => {
+  if (axios.isAxiosError(error) && error.response) {
+    return {
+      success: false,
+      error: (error.response.data as { error?: string })?.error || fallbackMessage,
+    };
+  }
+  return {
+    success: false,
+    error: 'Network error: Unable to connect to the server',
+  };
+};
+
 export const generatePrompt = async (request: GeneratePromptRequest): Promise<GeneratePromptResponse> => {
   try {
     const response = await api.post<GeneratePromptResponse>('/api/generate-prompt', request);
     return response.data;
   } catch (error) {
-    if (axios.isAxiosError(error) && error.response) {
-      return {
-        success: false,
-        error: error.response.data?.error || 'An error occurred while generating the prompt',
-      };
-    }
-    return {
-      success: false,
-      error: 'Network error: Unable to connect to the server',
-    };
+    return handleAxiosError(error, 'An error occurred while generating the prompt');
   }
 };
 
@@ -162,16 +193,17 @@ export const generatePromptFromImage = async (
     const response = await api.post<GeneratePromptResponse>('/api/describe-image', request);
     return response.data;
   } catch (error) {
-    if (axios.isAxiosError(error) && error.response) {
-      return {
-        success: false,
-        error: error.response.data?.error || 'An error occurred while analysing the image',
-      };
-    }
-    return {
-      success: false,
-      error: 'Network error: Unable to connect to the server',
-    };
+    return handleAxiosError(error, 'An error occurred while analysing the image');
   }
 };
 
+export const convertPrompt = async (
+  request: ConvertPromptRequest
+): Promise<ConvertPromptResponse> => {
+  try {
+    const response = await api.post<ConvertPromptResponse>('/api/convert-prompt', request);
+    return response.data;
+  } catch (error) {
+    return handleAxiosError(error, 'An error occurred while converting the prompt');
+  }
+};
