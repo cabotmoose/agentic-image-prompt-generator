@@ -120,6 +120,10 @@ class PromptConversionTasks:
             Follow the ProviderOptimizedPayload schema. Map values thoughtfully, reflect any relevant controls, and
             populate recommended_settings with numeric parameters suited to {target_model}. If controls or overrides are
             irrelevant, leave the corresponding objects empty.
+
+            When composing the positive prompt, condense it to roughly 100 words that spotlight the core subject, signature
+            style cues, environment, lighting, and the most critical technical directives for {target_model}. Remove filler
+            adjectives, avoid repetition, and keep the phrasing deployment ready while leaving the negative prompt untouched.
             """,
             agent=agent,
             expected_output="ProviderOptimizedPayload JSON with provider-ready payload details",
@@ -134,6 +138,7 @@ class PromptConversionTasks:
 
             Ensure the payload:
             - Preserves the creative intent and safety controls from the structured prompt
+            - Keeps the positive prompt around 100 words by trimming redundancies while retaining subject, style, environment, and key technical cues
             - Uses valid field names and realistic numeric ranges for {target_model}
             - Documents caveats or follow-up actions in the notes array
             - Keeps payload and recommended_settings aligned (no conflicting values)

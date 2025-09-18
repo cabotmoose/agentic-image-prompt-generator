@@ -108,6 +108,43 @@ class ProviderConfigurationService:
             raise ValueError(f"Unsupported provider '{provider_id}'. Supported providers: {supported}.")
         return self._providers[key]
 
+    @staticmethod
+    def _normalise_lookup_key(value: str) -> str:
+        return value.strip().lower().replace("-", "_")
+
+    def _resolve_override_key(
+        self,
+        config: ProviderConfig,
+        api_keys: Optional[Dict[str, str]],
+    ) -> Optional[str]:
+        if not api_keys:
+            return None
+
+        normalised: Dict[str, str] = {}
+        for raw_key, raw_value in api_keys.items():
+            if not isinstance(raw_value, str):
+                continue
+            value = raw_value.strip()
+            if not value:
+                continue
+            normalised[self._normalise_lookup_key(raw_key)] = value
+
+        if not normalised:
+            return None
+
+        candidate_keys = {
+            self._normalise_lookup_key(config.provider_id),
+            self._normalise_lookup_key(f"{config.provider_id}_api_key"),
+        }
+        if config.api_key_env:
+            candidate_keys.add(self._normalise_lookup_key(config.api_key_env))
+
+        for candidate in candidate_keys:
+            if candidate in normalised:
+                return normalised[candidate]
+
+        return None
+
     def create_llm(
         self,
         provider_id: Optional[str],
@@ -118,9 +155,7 @@ class ProviderConfigurationService:
         config = self.get_provider(provider_id)
         if require_vision and not config.supports_vision:
             raise ValueError(f"Provider '{config.provider_id}' does not support vision-enabled workflows.")
-        override_key: Optional[str] = None
-        if api_keys:
-            override_key = api_keys.get(config.provider_id)
+        override_key = self._resolve_override_key(config, api_keys)
         return config.create_llm(api_key_override=override_key)
 
     @property
