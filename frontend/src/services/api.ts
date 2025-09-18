@@ -22,26 +22,111 @@ export interface GeneratePromptFromImageRequest {
   provider_api_keys?: Record<string, string>;
 }
 
+export interface PromptTexts {
+  primary: string;
+  negative?: string;
+}
+
 export interface CameraSettings {
-  angle: string;
-  lens: string;
-  framing: string;
+  angle?: string;
+  lens?: string;
+  framing?: string;
+  depth_of_field?: string;
+}
+
+export interface Composition {
+  camera: CameraSettings;
+  shot?: string;
+  aspect_ratio?: string;
 }
 
 export interface Subject {
-  mood: string;
-  body_attributes: string;
-  age: number;
-  wardrobe: string;
-  pose: string;
+  role?: string;
+  age?: string;
+  body_attributes?: string;
+  wardrobe?: string;
+  pose?: string;
+  mood?: string;
 }
 
+export interface StyleSettings {
+  keywords: string[];
+  medium?: string;
+  aesthetic_bias: string[];
+}
+
+export interface ColorSettings {
+  palette?: string;
+  dominant_colors: string[];
+}
+
+export interface ImagePromptControl {
+  uri: string;
+  weight?: number;
+  type?: string;
+}
+
+export interface ControlNetConfig {
+  type: string;
+  image_uri: string;
+  weight?: number;
+  start?: number;
+  end?: number;
+}
+
+export interface LoraConfig {
+  name: string;
+  weight?: number;
+}
+
+export interface PromptControls {
+  image_prompts: ImagePromptControl[];
+  control_nets: ControlNetConfig[];
+  loras: LoraConfig[];
+}
+
+export interface GenerationParams {
+  width?: number;
+  height?: number;
+  steps?: number;
+  guidance?: number;
+  sampler?: string;
+  seed?: number;
+  images?: number;
+}
+
+export interface UpscaleSettings {
+  mode?: string;
+  strength?: number;
+}
+
+export interface PostProcessingSettings {
+  upscale: UpscaleSettings;
+  face_restore?: boolean;
+}
+
+export interface SafetySettings {
+  allow_nsfw?: boolean;
+}
+
+export type ProviderOverrides = Record<string, Record<string, unknown>>;
+
 export interface GeneratedPromptData {
-  camera: CameraSettings;
-  subjects?: Subject[];
-  style: string;
-  environment: string;
-  lighting: string;
+  version: string;
+  intent?: string;
+  prompt: PromptTexts;
+  subjects: Subject[];
+  environment?: string;
+  composition: Composition;
+  lighting?: string;
+  style: StyleSettings;
+  color: ColorSettings;
+  controls: PromptControls;
+  params: GenerationParams;
+  post: PostProcessingSettings;
+  safety: SafetySettings;
+  provider_overrides: ProviderOverrides;
+  notes?: string;
 }
 
 export interface GeneratePromptResponse {
@@ -89,3 +174,4 @@ export const generatePromptFromImage = async (
     };
   }
 };
+

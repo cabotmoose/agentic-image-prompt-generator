@@ -78,6 +78,72 @@ function normaliseTokenUsage(rawUsage: unknown): number {
   return 0;
 }
 
+function normaliseGeneratedPromptData(data: GeneratedPromptData): GeneratedPromptData {
+  return {
+    version: data.version || '1.0',
+    intent: data.intent ?? '',
+    prompt: {
+      primary: data.prompt?.primary ?? '',
+      negative: data.prompt?.negative ?? '',
+    },
+    subjects: (data.subjects ?? []).map((subject) => ({
+      role: subject.role ?? '',
+      age: subject.age ?? '',
+      body_attributes: subject.body_attributes ?? '',
+      wardrobe: subject.wardrobe ?? '',
+      pose: subject.pose ?? '',
+      mood: subject.mood ?? '',
+    })),
+    environment: data.environment ?? '',
+    composition: {
+      camera: {
+        angle: data.composition?.camera?.angle ?? '',
+        lens: data.composition?.camera?.lens ?? '',
+        framing: data.composition?.camera?.framing ?? '',
+        depth_of_field: data.composition?.camera?.depth_of_field ?? '',
+      },
+      shot: data.composition?.shot ?? '',
+      aspect_ratio: data.composition?.aspect_ratio ?? '',
+    },
+    lighting: data.lighting ?? '',
+    style: {
+      keywords: (data.style?.keywords ?? []).filter((keyword) => keyword.trim().length > 0),
+      medium: data.style?.medium ?? '',
+      aesthetic_bias: (data.style?.aesthetic_bias ?? []).filter((bias) => bias.trim().length > 0),
+    },
+    color: {
+      palette: data.color?.palette ?? '',
+      dominant_colors: (data.color?.dominant_colors ?? []).filter((color) => color.trim().length > 0),
+    },
+    controls: {
+      image_prompts: data.controls?.image_prompts ?? [],
+      control_nets: data.controls?.control_nets ?? [],
+      loras: data.controls?.loras ?? [],
+    },
+    params: {
+      width: data.params?.width,
+      height: data.params?.height,
+      steps: data.params?.steps,
+      guidance: data.params?.guidance,
+      sampler: data.params?.sampler ?? '',
+      seed: data.params?.seed,
+      images: data.params?.images,
+    },
+    post: {
+      upscale: {
+        mode: data.post?.upscale?.mode ?? '',
+        strength: data.post?.upscale?.strength,
+      },
+      face_restore: Boolean(data.post?.face_restore),
+    },
+    safety: {
+      allow_nsfw: Boolean(data.safety?.allow_nsfw),
+    },
+    provider_overrides: { flux: {}, wan: {}, sdxl: {}, ...(data.provider_overrides ?? {}) },
+    notes: data.notes ?? '',
+  };
+}
+
 export default function Home() {
   const [prompt, setPrompt] = useState('');
   const [inputMode, setInputMode] = useState<'text' | 'image'>('text');
@@ -127,16 +193,15 @@ export default function Home() {
     new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
-        if (!reader.result) {
-          reject(new Error('Unable to read the selected image.'));
-          return;
+        if (typeof reader.result === 'string') {
+          const resultString = reader.result as string;
+          const parts = resultString.split(',');
+          resolve(parts.length > 1 ? parts[1] : resultString);
+        } else {
+          reject(new Error('Unable to read image'));
         }
-
-        const resultString = reader.result.toString();
-        const base64 = resultString.includes(',') ? resultString.split(',')[1] : resultString;
-        resolve(base64);
       };
-      reader.onerror = () => reject(new Error('Unable to read the selected image.'));
+      reader.onerror = () => reject(new Error('Unable to read image'));
       reader.readAsDataURL(file);
     });
 
@@ -206,7 +271,7 @@ export default function Home() {
 
       setResponse(result);
       if (result.success && result.data) {
-        setEditableData(result.data);
+        setEditableData(normaliseGeneratedPromptData(result.data));
         setCopied(false);
         setCurrentStep(1);
       } else {
@@ -237,30 +302,168 @@ export default function Home() {
     }
   };
 
-  const handleCameraChange = (field: keyof GeneratedPromptData['camera'], value: string) => {
+  const handleVersionChange = (value: string) => {
+    setEditableData((current) => (current ? { ...current, version: value || current.version } : current));
+  };
+
+  const handleIntentChange = (value: string) => {
+    setEditableData((current) => (current ? { ...current, intent: value } : current));
+  };
+
+  const handlePromptChange = (field: 'primary' | 'negative', value: string) => {
     setEditableData((current) => {
       if (!current) return current;
       return {
         ...current,
-        camera: {
-          ...current.camera,
+        prompt: {
+          ...current.prompt,
           [field]: value,
         },
       };
     });
   };
 
-  const handleTopLevelChange = (
-    field: keyof Omit<GeneratedPromptData, 'camera' | 'subjects'>,
+  const handleEnvironmentChange = (value: string) => {
+    setEditableData((current) => (current ? { ...current, environment: value } : current));
+  };
+
+  const handleLightingChange = (value: string) => {
+    setEditableData((current) => (current ? { ...current, lighting: value } : current));
+  };
+
+  const handleCompositionCameraChange = (
+    field: keyof GeneratedPromptData['composition']['camera'],
     value: string
   ) => {
     setEditableData((current) => {
       if (!current) return current;
       return {
         ...current,
-        [field]: value,
+        composition: {
+          ...current.composition,
+          camera: {
+            ...current.composition.camera,
+            [field]: value,
+          },
+        },
       };
     });
+  };
+
+  const handleCompositionFieldChange = (
+    field: Exclude<keyof GeneratedPromptData['composition'], 'camera'>,
+    value: string
+  ) => {
+    setEditableData((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        composition: {
+          ...current.composition,
+          [field]: value,
+        },
+      };
+    });
+  };
+
+  const handleStyleMediumChange = (value: string) => {
+    setEditableData((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        style: {
+          ...current.style,
+          medium: value,
+        },
+      };
+    });
+  };
+
+  const handleStyleListChange = (field: 'keywords' | 'aesthetic_bias', values: string[]) => {
+    setEditableData((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        style: {
+          ...current.style,
+          [field]: values,
+        },
+      };
+    });
+  };
+
+  const handleColorPaletteChange = (value: string) => {
+    setEditableData((current) => (current ? { ...current, color: { ...current.color, palette: value } } : current));
+  };
+
+  const handleColorDominantColorsChange = (values: string[]) => {
+    setEditableData((current) => (current ? { ...current, color: { ...current.color, dominant_colors: values } } : current));
+  };
+
+  const handleParamsChange = (field: keyof GeneratedPromptData['params'], rawValue: string) => {
+    setEditableData((current) => {
+      if (!current) return current;
+      const nextParams = { ...current.params } as Record<string, unknown>;
+      if (field === 'sampler') {
+        nextParams.sampler = rawValue;
+      } else {
+        const trimmed = rawValue.trim();
+        if (!trimmed) {
+          delete nextParams[field as string];
+        } else {
+          const numericValue = Number(trimmed);
+          if (!Number.isNaN(numericValue)) {
+            nextParams[field as string] = numericValue;
+          }
+        }
+      }
+      return {
+        ...current,
+        params: nextParams as GeneratedPromptData['params'],
+      };
+    });
+  };
+
+  const handlePostUpscaleChange = (
+    field: keyof GeneratedPromptData['post']['upscale'],
+    rawValue: string
+  ) => {
+    setEditableData((current) => {
+      if (!current) return current;
+      const nextUpscale = { ...current.post.upscale };
+      if (field === 'mode') {
+        nextUpscale.mode = rawValue;
+      } else {
+        const trimmed = rawValue.trim();
+        if (!trimmed) {
+          nextUpscale.strength = undefined;
+        } else {
+          const numericValue = Number(trimmed);
+          if (!Number.isNaN(numericValue)) {
+            nextUpscale.strength = numericValue;
+          }
+        }
+      }
+      return {
+        ...current,
+        post: {
+          ...current.post,
+          upscale: nextUpscale,
+        },
+      };
+    });
+  };
+
+  const handlePostFaceRestoreChange = (value: boolean) => {
+    setEditableData((current) => (current ? { ...current, post: { ...current.post, face_restore: value } } : current));
+  };
+
+  const handleSafetyChange = (value: boolean) => {
+    setEditableData((current) => (current ? { ...current, safety: { ...current.safety, allow_nsfw: value } } : current));
+  };
+
+  const handleNotesChange = (value: string) => {
+    setEditableData((current) => (current ? { ...current, notes: value } : current));
   };
 
   const handleSubjectChange = <K extends keyof Subject>(index: number, field: K, value: string) => {
@@ -268,14 +471,6 @@ export default function Home() {
       if (!current || !current.subjects) return current;
       const updatedSubjects = current.subjects.map((subject, subjectIndex) => {
         if (subjectIndex !== index) return subject;
-        if (field === 'age') {
-          const numericValue = Number(value);
-          return {
-            ...subject,
-            [field]: Number.isNaN(numericValue) ? subject.age : numericValue,
-          };
-        }
-
         return {
           ...subject,
           [field]: value,
@@ -419,8 +614,22 @@ export default function Home() {
                 />
                 <RefineStep
                   editableData={editableData}
-                  onCameraChange={handleCameraChange}
-                  onTopLevelChange={handleTopLevelChange}
+                  onVersionChange={handleVersionChange}
+                  onIntentChange={handleIntentChange}
+                  onPromptChange={handlePromptChange}
+                  onEnvironmentChange={handleEnvironmentChange}
+                  onLightingChange={handleLightingChange}
+                  onCompositionCameraChange={handleCompositionCameraChange}
+                  onCompositionFieldChange={handleCompositionFieldChange}
+                  onStyleMediumChange={handleStyleMediumChange}
+                  onStyleListChange={handleStyleListChange}
+                  onColorPaletteChange={handleColorPaletteChange}
+                  onColorDominantColorsChange={handleColorDominantColorsChange}
+                  onParamsChange={handleParamsChange}
+                  onPostUpscaleChange={handlePostUpscaleChange}
+                  onPostFaceRestoreChange={handlePostFaceRestoreChange}
+                  onSafetyChange={handleSafetyChange}
+                  onNotesChange={handleNotesChange}
                   onSubjectChange={handleSubjectChange}
                   response={response}
                   navigation={renderNavigationControls({

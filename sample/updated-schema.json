@@ -1,0 +1,70 @@
+{
+  "version": "1.0",
+  "intent": "short human goal, e.g. 'moody cabin portrait'",
+  "prompt": {
+    "primary": "natural language description",
+    "negative": "artifacts to avoid"
+  },
+  "subjects": [
+    {
+      "role": "primary",
+      "age": "45",
+      "body_attributes": "well-groomed beard",
+      "wardrobe": "navy blazer, white shirt",
+      "pose": "standing, gaze to horizon",
+      "mood": "confident, relaxed"
+    }
+  ],
+  "environment": "setting/scene details",
+  "composition": {
+    "camera": {
+      "angle": "eye-level",
+      "lens": "85mm f/1.4",
+      "framing": "medium shot",
+      "depth_of_field": "shallow"
+    },
+    "shot": "portrait|wide|close-up",
+    "aspect_ratio": "3:2"
+  },
+  "lighting": "golden hour, soft rim light",
+  "style": {
+    "keywords": ["photorealistic", "cinematic"],
+    "medium": "photography",
+    "aesthetic_bias": ["clean skin", "natural tones"]
+  },
+  "color": {
+    "palette": "warm, muted",
+    "dominant_colors": ["#c49a6c", "#203040"]
+  },
+  "controls": {
+    "image_prompts": [
+      { "uri": "file:///…/ref1.png", "weight": 0.8, "type": "ip-adapter" }
+    ],
+    "control_nets": [
+      { "type": "canny", "image_uri": "file:///…/edge.png", "weight": 0.6, "start": 0.0, "end": 0.8 }
+    ],
+    "loras": [
+      { "name": "my-style-lora", "weight": 0.75 }
+    ]
+  },
+  "params": {
+    "width": 1024,
+    "height": 1536,
+    "steps": 28,
+    "guidance": 7.0,
+    "sampler": "euler_a",
+    "seed": 123456,
+    "images": 1
+  },
+  "post": {
+    "upscale": { "mode": "4x", "strength": 0.4 },
+    "face_restore": false
+  },
+  "safety": { "allow_nsfw": false },
+  "provider_overrides": {
+    "flux": {},
+    "wan": {},
+    "sdxl": {}
+  },
+  "notes": "freeform authoring hints for agents"
+}
